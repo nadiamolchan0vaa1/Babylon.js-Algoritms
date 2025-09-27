@@ -1,0 +1,36 @@
+{
+  "name": "babylon.js-lines",
+  "version": "1.0.0",
+  "description": "babylon.js algoritms",
+  "main": "server.js",
+  "scripts": {
+    "test": "I & Miha",
+    "start": "node server.js",
+    "format": "prettier --write \"**/*.{js,html}\"",
+    "prepare": "husky"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nadiamolchan0vaa1/Babylon.js-Algoritms.git"
+  },
+  "keywords": [
+    "geometry"
+  ],
+  "author": "Nadia",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/nadiamolchan0vaa1/Babylon.js-Algoritms/issues"
+  },
+  "homepage": "https://github.com/nadiamolchan0vaa1/Babylon.js-Algoritms#readme",
+  "dependencies": {
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.1",
+    "prettier": "3.6.2"
+  },
+  "lint-staged": {
+  "*.{js,html}": "prettier --write"
+}
+}
