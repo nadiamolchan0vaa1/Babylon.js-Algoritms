@@ -1,48 +1,55 @@
 window.addEventListener('DOMContentLoaded', function () {
-    const canvas = document.getElementById('renderCanvas');
+    const canvas = document.getElementById('renderCanvas'); // убедись, что canvas есть на visual.html
     const engine = new BABYLON.Engine(canvas, true);
+
+    const points2D = [];
+    const spheres = [];
+    let hullLine = null;
+    let triangleLines = [];
 
     const createScene = function () {
         const scene = new BABYLON.Scene(engine);
 
-        // Камера
-        const camera = new BABYLON.ArcRotateCamera(
-            'camera', Math.PI / 4, Math.PI / 4, 10, BABYLON.Vector3.Zero(), scene
-        );
+        const camera = new BABYLON.ArcRotateCamera('camera', Math.PI/4, Math.PI/4, 10, BABYLON.Vector3.Zero(), scene);
         camera.attachControl(canvas, true);
 
-        // Свет
-        const light = new BABYLON.HemisphericLight(
-            'light', new BABYLON.Vector3(1, 1, 0), scene
-        );
+        const light = new BABYLON.HemisphericLight('light', new BABYLON.Vector3(1,1,0), scene);
         light.intensity = 0.9;
 
-        // Оси координат
-        const size = 5;
-        BABYLON.MeshBuilder.CreateLines('axisX', {points: [BABYLON.Vector3.Zero(), new BABYLON.Vector3(size,0,0)]}, scene).color = new BABYLON.Color3(1,0,0);
-        BABYLON.MeshBuilder.CreateLines('axisY', {points: [BABYLON.Vector3.Zero(), new BABYLON.Vector3(0,size,0)]}, scene).color = new BABYLON.Color3(0,1,0);
-        BABYLON.MeshBuilder.CreateLines('axisZ', {points: [BABYLON.Vector3.Zero(), new BABYLON.Vector3(0,0,size)]}, scene).color = new BABYLON.Color3(0,0,1);
+        // Оси
+        const size=5;
+        BABYLON.MeshBuilder.CreateLines('axisX',{points:[BABYLON.Vector3.Zero(), new BABYLON.Vector3(size,0,0)]},scene).color=new BABYLON.Color3(1,0,0);
+        BABYLON.MeshBuilder.CreateLines('axisY',{points:[BABYLON.Vector3.Zero(), new BABYLON.Vector3(0,size,0)]},scene).color=new BABYLON.Color3(0,1,0);
+        BABYLON.MeshBuilder.CreateLines('axisZ',{points:[BABYLON.Vector3.Zero(), new BABYLON.Vector3(0,0,size)]},scene).color=new BABYLON.Color3(0,0,1);
+
+        // Динамически создаём панель ввода координат
+        const controlDiv = document.createElement('div');
+        controlDiv.style.position='absolute';
+        controlDiv.style.top='10px';
+        controlDiv.style.left='10px';
+        controlDiv.style.background='rgba(255,255,255,0.8)';
+        controlDiv.style.padding='10px';
+        controlDiv.style.borderRadius='5px';
+        controlDiv.style.zIndex='100';
+
+        const xInput = document.createElement('input');
+        xInput.placeholder='X';
+        xInput.type='number';
+        xInput.step='0.1';
+        const yInput = document.createElement('input');
+        yInput.placeholder='Y';
+        yInput.type='number';
+        yInput.step='0.1';
+
+        const addBtn = document.createElement('button');
+        addBtn.innerText='Добавить точку';
+        controlDiv.appendChild(xInput);
+        controlDiv.appendChild(yInput);
+        controlDiv.appendChild(addBtn);
+        document.body.appendChild(controlDiv);
 
         // ----------------------------
-        // Точки полигона
-        const points2D = [
-            {x:1, y:1},
-            {x:3, y:2},
-            {x:2, y:4},
-            {x:0, y:3},
-            {x:1.5, y:2.5}
-        ];
-
-        // Отобразим точки
-        points2D.forEach((p,i) => {
-            const sphere = BABYLON.MeshBuilder.CreateSphere(`point${i}`, {diameter:0.15}, scene);
-            sphere.position = new BABYLON.Vector3(p.x,p.y,0);
-            sphere.material = new BABYLON.StandardMaterial(`mat${i}`, scene);
-            sphere.material.diffuseColor = new BABYLON.Color3(1,0,1);
-        });
-
-        // ----------------------------
-        // Выпуклая оболочка (Graham Scan)
+        // Graham Scan
         function grahamScan(points) {
             if(points.length<3) return points.slice();
             const base = points.reduce((acc,p)=> (p.y<acc.y || (p.y===acc.y && p.x<acc.x))?p:acc );
@@ -60,34 +67,30 @@ window.addEventListener('DOMContentLoaded', function () {
             return stack;
         }
 
-        const hull = grahamScan(points2D);
+        function pointInTriangle(p,a,b,c){
+            const areaOrig = Math.abs((b.x-a.x)*(c.y-a.y)-(c.x-a.x)*(b.y-a.y))/2;
+            const area1 = Math.abs((a.x-p.x)*(b.y-p.y)-(b.x-p.x)*(a.y-p.y))/2;
+            const area2 = Math.abs((b.x-p.x)*(c.y-p.y)-(c.x-p.x)*(b.y-p.y))/2;
+            const area3 = Math.abs((c.x-p.x)*(a.y-p.y)-(a.x-p.x)*(c.y-p.y))/2;
+            return Math.abs(area1+area2+area3 - areaOrig)<1e-6;
+        }
 
-        // Нарисуем выпуклую оболочку
-        const hullPoints = hull.map(p=> new BABYLON.Vector3(p.x,p.y,0));
-        hullPoints.push(hullPoints[0]); // замкнуть контур
-        BABYLON.MeshBuilder.CreateLines("hull",{points:hullPoints},scene).color=new BABYLON.Color3(0,1,0);
-
-        // ----------------------------
-        // Простая триангуляция (Ear Clipping, для визуализации)
-        function triangulate(polygon) {
-            const triangles = [];
-            const pts = polygon.slice();
-            while(pts.length >= 3) {
+        function triangulate(polygon){
+            const triangles=[];
+            const pts=polygon.slice();
+            while(pts.length>=3){
                 for(let i=0;i<pts.length;i++){
-                    const prev = pts[(i+pts.length-1)%pts.length];
-                    const curr = pts[i];
-                    const next = pts[(i+1)%pts.length];
-
-                    // Простая проверка: "ухо" не содержит другие точки
-                    let isEar = true;
+                    const prev=pts[(i+pts.length-1)%pts.length];
+                    const curr=pts[i];
+                    const next=pts[(i+1)%pts.length];
+                    let isEar=true;
                     for(let p of pts){
                         if(p===prev || p===curr || p===next) continue;
-                        if(pointInTriangle(p, prev, curr, next)){
+                        if(pointInTriangle(p,prev,curr,next)){
                             isEar=false;
                             break;
                         }
                     }
-
                     if(isEar){
                         triangles.push([prev,curr,next]);
                         pts.splice(i,1);
@@ -98,27 +101,47 @@ window.addEventListener('DOMContentLoaded', function () {
             return triangles;
         }
 
-        function pointInTriangle(p, a, b, c){
-            const areaOrig = Math.abs((b.x-a.x)*(c.y-a.y)-(c.x-a.x)*(b.y-a.y))/2;
-            const area1 = Math.abs((a.x-p.x)*(b.y-p.y)-(b.x-p.x)*(a.y-p.y))/2;
-            const area2 = Math.abs((b.x-p.x)*(c.y-p.y)-(c.x-p.x)*(b.y-p.y))/2;
-            const area3 = Math.abs((c.x-p.x)*(a.y-p.y)-(a.x-p.x)*(c.y-p.y))/2;
-            return Math.abs(area1+area2+area3 - areaOrig)<1e-6;
+        // ----------------------------
+        function updateVisualization(){
+            if(hullLine) hullLine.dispose();
+            triangleLines.forEach(l=>l.dispose());
+            triangleLines=[];
+
+            const hull = grahamScan(points2D);
+            const hullPoints = hull.map(p=>new BABYLON.Vector3(p.x,p.y,0));
+            if(hullPoints.length>0) hullPoints.push(hullPoints[0]);
+            hullLine = BABYLON.MeshBuilder.CreateLines("hull",{points:hullPoints},scene);
+            hullLine.color=new BABYLON.Color3(0,1,0);
+
+            const triangles = triangulate(points2D);
+            triangles.forEach((tri,i)=>{
+                const pts = tri.map(p=>new BABYLON.Vector3(p.x,p.y,0));
+                pts.push(pts[0]);
+                const l = BABYLON.MeshBuilder.CreateLines(`tri${i}`,{points:pts},scene);
+                l.color=new BABYLON.Color3(0,0,1);
+                triangleLines.push(l);
+            });
         }
 
-        const triangles = triangulate(points2D);
-
-        // Нарисуем треугольники
-        triangles.forEach((tri,i)=>{
-            const pts = tri.map(p=> new BABYLON.Vector3(p.x,p.y,0));
-            pts.push(pts[0]);
-            BABYLON.MeshBuilder.CreateLines(`tri${i}`,{points:pts},scene).color=new BABYLON.Color3(0,0,1);
+        addBtn.addEventListener('click',()=>{
+            const x=parseFloat(xInput.value);
+            const y=parseFloat(yInput.value);
+            if(!isNaN(x) && !isNaN(y)){
+                points2D.push({x,y});
+                const sphere = BABYLON.MeshBuilder.CreateSphere(`point${points2D.length}`,{diameter:0.15},scene);
+                sphere.position = new BABYLON.Vector3(x,y,0);
+                const mat = new BABYLON.StandardMaterial(`mat${points2D.length}`,scene);
+                mat.diffuseColor = new BABYLON.Color3(1,0,1);
+                sphere.material=mat;
+                spheres.push(sphere);
+                updateVisualization();
+            }
         });
 
         return scene;
     };
 
     const scene = createScene();
-    engine.runRenderLoop(()=>{scene.render();});
-    window.addEventListener('resize',()=>{engine.resize();});
+    engine.runRenderLoop(()=>scene.render());
+    window.addEventListener('resize',()=>engine.resize());
 });
