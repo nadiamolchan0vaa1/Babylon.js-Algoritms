@@ -1,0 +1,84 @@
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f7f7f7;
+  color: #333;
+}
+
+header {
+  background: #0056b3;
+  color: white;
+  padding: 15px;
+  text-align: center;
+}
+
+.main-container {
+  display: flex;
+  justify-content: space-between;
+  padding: 20px;
+}
+
+.left-page {
+  flex: 1;
+  margin-right: 20px;
+}
+
+.right-page {
+  flex: 1;
+}
+
+.right-page h2 {
+  margin-bottom: 15px;
+}
+
+.algorithm-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 15px;
+  background: #fff;
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.algorithm-link {
+  font-weight: bold;
+  color: #0056b3;
+  text-decoration: none;
+}
+
+.algorithm-link:hover {
+  text-decoration: underline;
+}
+
+.algorithm-name {
+  color: #333;
+}
+
+footer {
+  background: #eee;
+  padding: 15px;
+  text-align: center;
+  margin-top: 20px;
+}
+
+.author-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 5px 0;
+}
+
+.author-name {
+  font-weight: bold;
+}
+
+.author-link {
+  color: #0056b3;
+  text-decoration: none;
+}
+
+.author-link:hover {
+  text-decoration: underline;
+}
