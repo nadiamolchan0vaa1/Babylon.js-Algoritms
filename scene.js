@@ -1,11 +1,12 @@
 window.addEventListener('DOMContentLoaded', function () {
-    const canvas = document.getElementById('renderCanvas'); // убедись, что canvas есть на visual.html
+    const canvas = document.getElementById('renderCanvas');
     const engine = new BABYLON.Engine(canvas, true);
 
     const points2D = [];
     const spheres = [];
     let hullLine = null;
     let triangleLines = [];
+    let distanceLines = [];
 
     const createScene = function () {
         const scene = new BABYLON.Scene(engine);
@@ -22,7 +23,8 @@ window.addEventListener('DOMContentLoaded', function () {
         BABYLON.MeshBuilder.CreateLines('axisY',{points:[BABYLON.Vector3.Zero(), new BABYLON.Vector3(0,size,0)]},scene).color=new BABYLON.Color3(0,1,0);
         BABYLON.MeshBuilder.CreateLines('axisZ',{points:[BABYLON.Vector3.Zero(), new BABYLON.Vector3(0,0,size)]},scene).color=new BABYLON.Color3(0,0,1);
 
-        // Динамически создаём панель ввода координат
+        // ----------------------------
+        // Панель ввода координат
         const controlDiv = document.createElement('div');
         controlDiv.style.position='absolute';
         controlDiv.style.top='10px';
@@ -43,9 +45,31 @@ window.addEventListener('DOMContentLoaded', function () {
 
         const addBtn = document.createElement('button');
         addBtn.innerText='Добавить точку';
+
+        const clearBtn = document.createElement('button');
+        clearBtn.innerText='Очистить все точки и линии';
+
+        const checkBtn = document.createElement('button');
+        checkBtn.innerText='Проверить точку внутри многоугольника';
+
+        const checkX = document.createElement('input');
+        checkX.placeholder='X точки';
+        checkX.type='number';
+        checkX.step='0.1';
+        const checkY = document.createElement('input');
+        checkY.placeholder='Y точки';
+        checkY.type='number';
+        checkY.step='0.1';
+
         controlDiv.appendChild(xInput);
         controlDiv.appendChild(yInput);
         controlDiv.appendChild(addBtn);
+        controlDiv.appendChild(document.createElement('br'));
+        controlDiv.appendChild(clearBtn);
+        controlDiv.appendChild(document.createElement('br'));
+        controlDiv.appendChild(checkX);
+        controlDiv.appendChild(checkY);
+        controlDiv.appendChild(checkBtn);
         document.body.appendChild(controlDiv);
 
         // ----------------------------
@@ -101,18 +125,46 @@ window.addEventListener('DOMContentLoaded', function () {
             return triangles;
         }
 
+        function pointInPolygon(point, polygon){
+            let count = 0;
+            const n = polygon.length;
+            for (let i=0;i<n;i++){
+                const j = (i+1)%n;
+                const xi = polygon[i].x, yi = polygon[i].y;
+                const xj = polygon[j].x, yj = polygon[j].y;
+                if (((yi>point.y)!=(yj>point.y)) && (point.x<((xj-xi)*(point.y-yi))/(yj-yi)+xi)){
+                    count++;
+                }
+            }
+            return count%2===1;
+        }
+
+        function distancePointToSegment(p,a,b){
+            const l2 = (b.x-a.x)**2 + (b.y-a.y)**2;
+            if(l2===0) return Math.hypot(p.x-a.x,p.y-a.y);
+            let t = ((p.x-a.x)*(b.x-a.x)+(p.y-a.y)*(b.y-a.y))/l2;
+            t = Math.max(0, Math.min(1,t));
+            const proj = {x: a.x + t*(b.x-a.x), y: a.y + t*(b.y-a.y)};
+            return {distance: Math.hypot(p.x-proj.x, p.y-proj.y), proj};
+        }
+
         // ----------------------------
         function updateVisualization(){
+            // Очистка старых линий
             if(hullLine) hullLine.dispose();
             triangleLines.forEach(l=>l.dispose());
             triangleLines=[];
+            distanceLines.forEach(l=>l.dispose());
+            distanceLines=[];
 
+            // Выпуклая оболочка
             const hull = grahamScan(points2D);
             const hullPoints = hull.map(p=>new BABYLON.Vector3(p.x,p.y,0));
             if(hullPoints.length>0) hullPoints.push(hullPoints[0]);
             hullLine = BABYLON.MeshBuilder.CreateLines("hull",{points:hullPoints},scene);
             hullLine.color=new BABYLON.Color3(0,1,0);
 
+            // Триангуляция
             const triangles = triangulate(points2D);
             triangles.forEach((tri,i)=>{
                 const pts = tri.map(p=>new BABYLON.Vector3(p.x,p.y,0));
@@ -136,6 +188,33 @@ window.addEventListener('DOMContentLoaded', function () {
                 spheres.push(sphere);
                 updateVisualization();
             }
+        });
+
+        clearBtn.addEventListener('click',()=>{
+            points2D.length=0;
+            spheres.forEach(s=>s.dispose());
+            spheres.length=0;
+            if(hullLine) hullLine.dispose();
+            triangleLines.forEach(l=>l.dispose());
+            triangleLines=[];
+            distanceLines.forEach(l=>l.dispose());
+            distanceLines=[];
+        });
+
+        checkBtn.addEventListener('click',()=>{
+            const x=parseFloat(checkX.value);
+            const y=parseFloat(checkY.value);
+            if(isNaN(x)||isNaN(y)) return;
+            const inside = pointInPolygon({x,y}, points2D);
+            //
+            // Добавляем визуальную точку для проверки
+            const testSphere = BABYLON.MeshBuilder.CreateSphere(`testPoint`, {diameter:0.2}, scene);
+            testSphere.position = new BABYLON.Vector3(x, y, 0);
+            const matTest = new BABYLON.StandardMaterial(`matTest`, scene);
+            matTest.diffuseColor = inside ? new BABYLON.Color3(0,1,0) : new BABYLON.Color3(1,0,0); // зелёная если внутри, красная если снаружи
+            testSphere.material = matTest;
+            //
+            alert(inside? "Точка внутри многоугольника":"Точка снаружи многоугольника");
         });
 
         return scene;
