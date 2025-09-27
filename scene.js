@@ -61,6 +61,9 @@ window.addEventListener('DOMContentLoaded', function () {
         checkY.type='number';
         checkY.step='0.1';
 
+        const rotateBtn = document.createElement('button');
+        rotateBtn.innerText = 'Повернуть полигон';
+
         controlDiv.appendChild(xInput);
         controlDiv.appendChild(yInput);
         controlDiv.appendChild(addBtn);
@@ -70,6 +73,8 @@ window.addEventListener('DOMContentLoaded', function () {
         controlDiv.appendChild(checkX);
         controlDiv.appendChild(checkY);
         controlDiv.appendChild(checkBtn);
+        controlDiv.appendChild(document.createElement('br'));
+        controlDiv.appendChild(rotateBtn);
         document.body.appendChild(controlDiv);
 
         // ----------------------------
@@ -100,8 +105,7 @@ window.addEventListener('DOMContentLoaded', function () {
         }
 
         function triangulate(polygon){
-            const triangles=[];
-            const pts=polygon.slice();
+            const triangles=[]; const pts=polygon.slice();
             while(pts.length>=3){
                 for(let i=0;i<pts.length;i++){
                     const prev=pts[(i+pts.length-1)%pts.length];
@@ -111,14 +115,12 @@ window.addEventListener('DOMContentLoaded', function () {
                     for(let p of pts){
                         if(p===prev || p===curr || p===next) continue;
                         if(pointInTriangle(p,prev,curr,next)){
-                            isEar=false;
-                            break;
+                            isEar=false; break;
                         }
                     }
                     if(isEar){
                         triangles.push([prev,curr,next]);
-                        pts.splice(i,1);
-                        break;
+                        pts.splice(i,1); break;
                     }
                 }
             }
@@ -126,8 +128,7 @@ window.addEventListener('DOMContentLoaded', function () {
         }
 
         function pointInPolygon(point, polygon){
-            let count = 0;
-            const n = polygon.length;
+            let count = 0; const n = polygon.length;
             for (let i=0;i<n;i++){
                 const j = (i+1)%n;
                 const xi = polygon[i].x, yi = polygon[i].y;
@@ -149,13 +150,42 @@ window.addEventListener('DOMContentLoaded', function () {
         }
 
         // ----------------------------
+        // Центроид
+        function computeCentroid(polygon){
+            let A=0,Cx=0,Cy=0;
+            const n=polygon.length;
+            for(let i=0;i<n;i++){
+                const j=(i+1)%n;
+                const xi=polygon[i].x, yi=polygon[i].y;
+                const xj=polygon[j].x, yj=polygon[j].y;
+                const cross = xi*yj - xj*yi;
+                A += cross;
+                Cx += (xi+xj)*cross;
+                Cy += (yi+yj)*cross;
+            }
+            A /= 2;
+            Cx /= (6*A);
+            Cy /= (6*A);
+            return {x:Cx, y:Cy};
+        }
+
+        function rotatePolygon(polygon, angle){
+            const centroid = computeCentroid(polygon);
+            const cosA=Math.cos(angle), sinA=Math.sin(angle);
+            return polygon.map(p=>{
+                const x = p.x - centroid.x;
+                const y = p.y - centroid.y;
+                return {
+                    x: centroid.x + x*cosA - y*sinA,
+                    y: centroid.y + x*sinA + y*cosA
+                };
+            });
+        }
+
         function updateVisualization(){
-            // Очистка старых линий
             if(hullLine) hullLine.dispose();
-            triangleLines.forEach(l=>l.dispose());
-            triangleLines=[];
-            distanceLines.forEach(l=>l.dispose());
-            distanceLines=[];
+            triangleLines.forEach(l=>l.dispose()); triangleLines=[];
+            distanceLines.forEach(l=>l.dispose()); distanceLines=[];
 
             // Выпуклая оболочка
             const hull = grahamScan(points2D);
@@ -173,18 +203,29 @@ window.addEventListener('DOMContentLoaded', function () {
                 l.color=new BABYLON.Color3(0,0,1);
                 triangleLines.push(l);
             });
+
+            // Центроид
+            if(window.centroidSphere) window.centroidSphere.dispose();
+            if(hullPoints.length>1){
+                const centroid = computeCentroid(hull.map(p=>({x:p.x, y:p.y})));
+                window.centroidSphere = BABYLON.MeshBuilder.CreateSphere("centroid",{diameter:0.2},scene);
+                window.centroidSphere.position = new BABYLON.Vector3(centroid.x, centroid.y, 0);
+                const matCentroid = new BABYLON.StandardMaterial("matCentroid",scene);
+                matCentroid.diffuseColor = new BABYLON.Color3(1,1,0);
+                window.centroidSphere.material = matCentroid;
+            }
         }
 
         addBtn.addEventListener('click',()=>{
             const x=parseFloat(xInput.value);
             const y=parseFloat(yInput.value);
-            if(!isNaN(x) && !isNaN(y)){
+            if(!isNaN(x)&&!isNaN(y)){
                 points2D.push({x,y});
                 const sphere = BABYLON.MeshBuilder.CreateSphere(`point${points2D.length}`,{diameter:0.15},scene);
                 sphere.position = new BABYLON.Vector3(x,y,0);
                 const mat = new BABYLON.StandardMaterial(`mat${points2D.length}`,scene);
                 mat.diffuseColor = new BABYLON.Color3(1,0,1);
-                sphere.material=mat;
+                sphere.material = mat;
                 spheres.push(sphere);
                 updateVisualization();
             }
@@ -192,13 +233,11 @@ window.addEventListener('DOMContentLoaded', function () {
 
         clearBtn.addEventListener('click',()=>{
             points2D.length=0;
-            spheres.forEach(s=>s.dispose());
-            spheres.length=0;
+            spheres.forEach(s=>s.dispose()); spheres.length=0;
             if(hullLine) hullLine.dispose();
-            triangleLines.forEach(l=>l.dispose());
-            triangleLines=[];
-            distanceLines.forEach(l=>l.dispose());
-            distanceLines=[];
+            triangleLines.forEach(l=>l.dispose()); triangleLines=[];
+            distanceLines.forEach(l=>l.dispose()); distanceLines=[];
+            if(window.centroidSphere) window.centroidSphere.dispose();
         });
 
         checkBtn.addEventListener('click',()=>{
@@ -206,15 +245,28 @@ window.addEventListener('DOMContentLoaded', function () {
             const y=parseFloat(checkY.value);
             if(isNaN(x)||isNaN(y)) return;
             const inside = pointInPolygon({x,y}, points2D);
-            //
-            // Добавляем визуальную точку для проверки
             const testSphere = BABYLON.MeshBuilder.CreateSphere(`testPoint`, {diameter:0.2}, scene);
-            testSphere.position = new BABYLON.Vector3(x, y, 0);
-            const matTest = new BABYLON.StandardMaterial(`matTest`, scene);
-            matTest.diffuseColor = inside ? new BABYLON.Color3(0,1,0) : new BABYLON.Color3(1,0,0); // зелёная если внутри, красная если снаружи
+            testSphere.position = new BABYLON.Vector3(x,y,0);
+            const matTest = new BABYLON.StandardMaterial(`matTest`,scene);
+            matTest.diffuseColor = inside? new BABYLON.Color3(0,1,0) : new BABYLON.Color3(1,0,0);
             testSphere.material = matTest;
-            //
             alert(inside? "Точка внутри многоугольника":"Точка снаружи многоугольника");
+        });
+
+        rotateBtn.addEventListener('click', ()=>{
+            const angle = Math.PI/12; // 15 градусов
+            const newPoints = rotatePolygon(points2D, angle);
+            points2D.length=0; newPoints.forEach(p=>points2D.push(p));
+            spheres.forEach(s=>s.dispose()); spheres.length=0;
+            newPoints.forEach(p=>{
+                const sphere = BABYLON.MeshBuilder.CreateSphere(`point${points2D.length+1}`,{diameter:0.15},scene);
+                sphere.position = new BABYLON.Vector3(p.x,p.y,0);
+                const mat = new BABYLON.StandardMaterial(`mat${points2D.length+1}`,scene);
+                mat.diffuseColor = new BABYLON.Color3(1,0,1);
+                sphere.material = mat;
+                spheres.push(sphere);
+            });
+            updateVisualization();
         });
 
         return scene;
