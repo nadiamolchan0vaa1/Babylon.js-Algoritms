@@ -82,3 +82,18 @@ footer {
 .author-link:hover {
   text-decoration: underline;
 }
+
+.result-container {
+  width: 100%;
+  height: 600px; /* можно менять под себя */
+  border: 2px solid #ccc;
+  border-radius: 10px;
+  overflow: hidden;
+  position: relative;
+}
+
+#renderCanvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
